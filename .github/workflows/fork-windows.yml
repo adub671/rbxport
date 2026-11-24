@@ -25,7 +25,10 @@ jobs:
       RBXPORT_TEST: "1"
       CARGO_TARGET_DIR: C:\t
     steps:
-      - run: git config --global core.longpaths true
+      - name: Long paths, and LF endings as the sources are written
+        run: |
+          git config --global core.longpaths true
+          git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
