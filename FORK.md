@@ -31,7 +31,7 @@ curl -H "Authorization: Bearer $TOKEN" -d '{}' http://127.0.0.1:48650/invoke/lib
 
 `POST /invoke/<command>` takes a JSON object of the command's arguments in camelCase. The commands are the ones in the `generate_handler!` list in [`src-tauri/src/lib.rs`](src-tauri/src/lib.rs), and the argument names are each Rust function's parameters. A command's own error comes back as HTTP 422 with `{kind, message}`.
 
-An edit made this way takes the app's one edit path: Library Protection and the read-only refusals apply, and the window redraws. Plugin commands and the update commands are refused.
+An edit made this way takes the app's one edit path: Library Protection and the read-only refusals apply, and the window redraws. Plugin commands, the update commands, `format_device`, and the commands that create or switch the library are refused.
 
 Only one of rekordbox, stock rbxport and this fork should have the library open at a time.
 

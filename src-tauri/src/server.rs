@@ -23,9 +23,10 @@
 //!
 //! # What is not served
 //!
-//! Plugin commands (dialogs, the opener, the updater) and the update
-//! commands. They open windows, launch programs or replace the app, and
-//! nothing a library script needs is among them.
+//! Plugin commands (dialogs, the opener, the updater), the update commands,
+//! formatting a drive, and creating or switching the library. They open
+//! windows, launch programs, replace the app or erase things, and nothing a
+//! library script needs is among them.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -47,8 +48,19 @@ const READ_TIMEOUT: Duration = Duration::from_secs(30);
 /// A full-library import or analysis pass is one command, so this is long.
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(600);
 
-const REFUSED_COMMANDS: &[&str] =
-    &["test_eval_result", "check_for_update", "ready_update", "download_update", "restart_to_update"];
+const REFUSED_COMMANDS: &[&str] = &[
+    "test_eval_result",
+    "check_for_update",
+    "ready_update",
+    "download_update",
+    "restart_to_update",
+    // Erases a drive, or points the app at another library. A person does
+    // these in the window, where they are asked first.
+    "format_device",
+    "create_library",
+    "switch_library",
+    "use_default_library",
+];
 
 #[derive(Deserialize)]
 struct Config {
@@ -389,8 +401,8 @@ mod tests {
     }
 
     #[test]
-    fn plugin_and_update_commands_are_not_served() {
-        for command in ["plugin:opener|open_path", "download_update", "restart_to_update"] {
+    fn plugin_update_and_destructive_commands_are_not_served() {
+        for command in ["plugin:opener|open_path", "download_update", "format_device", "switch_library"] {
             let response = exchange(&format!("POST /invoke/{command} HTTP/1.1\r\nAuthorization: Bearer {TOKEN}\r\n\r\n"));
             assert!(response.starts_with("HTTP/1.1 403 "), "{command}: {response}");
         }
