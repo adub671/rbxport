@@ -18,7 +18,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ComponentType, type 
 import {
   PrefAboutIcon, PrefAdvancedIcon, PrefAnalysisIcon, PrefAudioIcon, PrefDjSystemIcon,
   PrefKeyboardIcon, PrefViewIcon,
-  LinkIcon,
+  FolderIcon, LinkIcon,
 } from "@/components/icons";
 import { getBackend } from "@/ipc/client";
 import { ReportBug } from "@/views/report/ReportBug";
@@ -34,6 +34,7 @@ import { DjSystemPane, DJ_SYSTEM_TABS, type DjSystemTab } from "./DjSystemPane";
 import { KeyboardPane } from "./KeyboardPane";
 import { USB_EXPORT_SECTIONS, UsbExportPane } from "./UsbExportPane";
 import { BackupsPane } from "./BackupsPane";
+import { ImportPane } from "./ImportPane";
 import { ArchiveRestore, RefreshCw } from "lucide-react";
 import { LinkPane } from "./LinkPane";
 import { RekordboxPane } from "./RekordboxPane";
@@ -45,7 +46,7 @@ import { ViewPane, VIEW_TABS, type ViewTab } from "./ViewPane";
  * The sidebar, in the capture's order and wording, less PLAN and CLOUD, and
  * with About at the end — ours, for the version and the update check.
  */
-export type Pane = "view" | "audio" | "analysis" | "djSystem" | "link" | "keyboard" | "advanced" | "backups" | "usbExport" | "rekordbox" | "about";
+export type Pane = "view" | "audio" | "analysis" | "djSystem" | "link" | "keyboard" | "advanced" | "import" | "backups" | "usbExport" | "rekordbox" | "about";
 
 /** A place in Preferences that opens a pane at one of its sections. */
 type SectionTarget = "usbExportSync" | "usbExportImport";
@@ -82,6 +83,7 @@ const PANES: readonly { id: Pane; label: string; Icon: ComponentType<SVGProps<SV
   { id: "djSystem", label: "DJ System", Icon: PrefDjSystemIcon },
   { id: "keyboard", label: "Keyboard", Icon: PrefKeyboardIcon },
   { id: "advanced", label: "Advanced", Icon: PrefAdvancedIcon },
+  { id: "import", label: "Import", Icon: FolderIcon },
   { id: "rekordbox", label: "Rekordbox", Icon: RefreshCw },
   { id: "link", label: "PRO DJ LINK", Icon: LinkIcon },
   { id: "usbExport", label: "USB Export", Icon: UsbStickIcon },
@@ -96,6 +98,7 @@ const RESETS: Partial<Record<Pane, PreferencePane>> = {
   analysis: "analysis",
   djSystem: "djSystem",
   advanced: "advanced",
+  import: "intake",
   usbExport: "usbExport",
   rekordbox: "rekordbox",
 };
@@ -328,6 +331,8 @@ export function Preferences({
                   <KeyboardPane />
                 ) : pane === "usbExport" ? (
                   <UsbExportPane />
+                ) : pane === "import" ? (
+                  <ImportPane />
                 ) : pane === "backups" ? (
                   <BackupsPane />
                 ) : pane === "rekordbox" ? (

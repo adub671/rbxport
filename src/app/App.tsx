@@ -98,6 +98,7 @@ import { statusBarListText } from "@/lib/format";
 import { autoRelocated, missingAmong, relocateSteps, relocateTracks } from "@/lib/relocate";
 import { useTooltip } from "@/store/usePreferences";
 import { useTranslation } from "@/i18n";
+import { useIntake } from "@/app/useIntake";
 import { nativeMenuLabels } from "@/lib/nativeMenu";
 
 /** The commands the shell itself registers, and so the keys it runs. */
@@ -1334,10 +1335,22 @@ function AppBody() {
     });
   }, [readOnly, advancedPrefs.protectLibrary, refuse, jobs, t, analysisPrefs.auto, analysis, report]);
 
+  const onIntakeImported = useCallback((tracks: readonly { id: string; title: string }[]) => {
+    if (analysisPrefs.auto) analysis.add(tracks);
+  }, [analysisPrefs.auto, analysis]);
+  const { active: intakeActive, start: startIntake, note: intakeNote } = useIntake({ prefs: prefs.preferences.intake, jobs, onImported: onIntakeImported, addTracksTo });
+
   const importDroppedPaths = useCallback((target: string, paths: string[]) => {
+    // Preferences › Import copies a drop on All Tracks or a playlist into the
+    // library folder first; a folder dropped on the tree's folders does not.
+    if (intakeActive && (target === "all" || tree.find((n) => n.id === target)?.kind === "playlist")) {
+      if (readOnly) refuse(refusal(advancedPrefs.protectLibrary));
+      else startIntake(target, paths);
+      return;
+    }
     if (target === "all") importDroppedPathsToCollection(paths);
     else importDroppedPathsTo(target, paths);
-  }, [importDroppedPathsToCollection, importDroppedPathsTo]);
+  }, [importDroppedPathsToCollection, importDroppedPathsTo, intakeActive, startIntake, tree, readOnly, refuse, advancedPrefs.protectLibrary]);
 
   const importDroppedFilesTo = useCallback(
     (target: string, files: File[]) => {
@@ -3505,6 +3518,7 @@ function AppBody() {
           onDropTracks={selectedNode?.kind === "playlist" ? addDraggedTo : undefined}
           onDragError={refuse}
           onDropFiles={importDroppedFilesIntoOpen}
+          fileDropNote={importDroppedFilesIntoOpen && selectedNode ? intakeNote(selectedNode.name) : undefined}
           players={deckCount(layout)}
           onLoadTrack={loadTrack}
           onRate={rateTrack}

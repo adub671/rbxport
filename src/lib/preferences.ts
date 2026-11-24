@@ -334,8 +334,21 @@ export interface KeyboardPreferences {
   overrides: Record<string, KeyChord>;
 }
 
+/** Preferences › Import: dropped files copied into a library folder first. */
+export interface IntakePreferences {
+  /** `null` until the person chooses: the build's default (`intakeDefaultEnabled`). */
+  copy: boolean | null;
+  /** The library folder. Empty until one is chosen, and the copy is off until then. */
+  root: string;
+  layout: "month" | "flat";
+  after: "keep" | "recycle";
+  /** Same file name and size counts as already in the library. */
+  duplicates: boolean;
+}
+
 export interface Preferences {
   rekordbox: { syncBrowseSettings: boolean };
+  intake: IntakePreferences;
   view: ViewPreferences;
   audio: AudioPreferences;
   analysis: AnalysisPreferences;
@@ -364,6 +377,7 @@ export type PreferencePane = keyof Preferences;
  */
 export const DEFAULT_PREFERENCES: Preferences = {
   rekordbox: { syncBrowseSettings: true },
+  intake: { copy: null, root: "", layout: "month", after: "recycle", duplicates: true },
   view: {
     locale: "en",
     showBpmChanges: true,
@@ -541,9 +555,17 @@ export function sanitisePreferences(value: unknown): Preferences {
   const keyboard = part<KeyboardPreferences>(raw.keyboard);
   const usb = part<Preferences["usbExport"]>(raw.usbExport);
   const rekordbox = part<Preferences["rekordbox"]>(raw.rekordbox);
+  const intake = part<IntakePreferences>(raw.intake);
   const d = DEFAULT_PREFERENCES;
   return {
     rekordbox: { syncBrowseSettings: bool(rekordbox.syncBrowseSettings, true) },
+    intake: {
+      copy: typeof intake.copy === "boolean" ? intake.copy : null,
+      root: typeof intake.root === "string" ? intake.root : "",
+      layout: oneOf(intake.layout, ["month", "flat"] as const, d.intake.layout),
+      after: oneOf(intake.after, ["keep", "recycle"] as const, d.intake.after),
+      duplicates: bool(intake.duplicates, d.intake.duplicates),
+    },
     usbExport: { deleteUnlistedMusic: bool(usb.deleteUnlistedMusic, false), maximumCompatibility: bool(usb.maximumCompatibility, false), conversionFormat: oneOf(usb.conversionFormat, ["wav", "aiff", "mp3"] as const, "wav"), verifyAllFiles: bool(usb.verifyAllFiles, false), importButtonCues: bool(usb.importButtonCues, true), importButtonHistory: bool(usb.importButtonHistory, true), importButtonSettings: bool(usb.importButtonSettings, false), importButtonRatings: bool(usb.importButtonRatings, true) },
     view: {
       locale: oneOf(view.locale, LOCALES, d.view.locale),

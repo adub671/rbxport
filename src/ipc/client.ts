@@ -11,7 +11,7 @@ import type {
   DevicePlaylistEditResult, DevicePlaylistImportPlan, DevicePlaylistImportResult, DeviceSettings, DeviceSyncState,
   Diagnostics, Duplicates, LogPage, GridState, Limiter, PreferencesRequest, SmartRule, SyncDeviceReport, SyncProgress, UpdateCheck,
   UpdateProgress, UpdateReady, XmlImportReport,
-  ExportProgress, ExportReport, ExplorerChildren, ExplorerRoot, FilterValues, FolderPlaylistReport, Phrase, ImportReport,
+  ExportProgress, ExportReport, ExplorerChildren, ExplorerRoot, FilterValues, FolderPlaylistReport, Phrase, ImportReport, IntakeProgress, IntakeReport,
   DatabaseDrive, EditHistoryState, ItunesLibrary, LibraryProblem, LibrarySummary, LinkPeerSeen, Meters,
   LinkStatus, MissingExportFile, MissingTrack, MissingTracks, PreviewState, UnanalysedTracks, ReferenceStickSettings, RelocateReport, RowDto, ScriptRequest, Tick,
   TreeNode, ViewHandle,
@@ -267,6 +267,10 @@ async function realBackend(): Promise<Backend> {
     importPaths: (paths) => invoke<ImportReport>("import_files", { paths }),
     listImportFiles: (paths) => invoke<string[]>("list_import_files", { paths }),
     importPathsSlice: (paths) => invoke<ImportReport>("import_files_slice", { paths }),
+    intakeAndImport: (paths, settings) => invoke<IntakeReport>("intake_and_import", { paths, settings }),
+    cancelIntake: () => invoke<void>("cancel_intake"),
+    intakeDefaultEnabled: () => invoke<boolean>("intake_default_enabled"),
+    onIntakeProgress: (listener) => subscribe<IntakeProgress>("intake:progress", listener),
     importFolderPlaylist: (path, parent, replace, at, copy) =>
       invoke<FolderPlaylistReport>("import_folder_playlist", {
         path, parent, replace: replace ?? null, at: at ?? null, copy: copy ?? null,

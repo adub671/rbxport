@@ -17,6 +17,19 @@
   outline-offset: -2px;
 }
 
+/* Preferences › Import's note over the whole list, placed on every grid row
+   at once so it adds none. */
+.intakeOverlay {
+  grid-area: 1 / 1 / -1 / -1;
+  place-self: center;
+  z-index: 2;
+  pointer-events: none;
+  padding: var(--s-player-artwork-gap);
+  color: var(--c-text);
+  background: var(--c-black);
+  outline: 1px solid var(--c-select);
+}
+
 /* The title row: 26pt of panel with a measured point of black under it
    before the column headings, drawn as a border so the row and its line are
    one grid track. The search field sits at the right, 20pt short of the
