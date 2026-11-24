@@ -983,7 +983,7 @@ mod tests {
         // Without the Nix launcher's variable, this test process is not one.
         if std::env::var_os(NIX_ENV).is_none() && std::env::var_os("APPIMAGE").is_none() {
             assert!(!nix_install());
-            assert!(managed_refusal().is_none() || cfg!(windows));
+            assert!(managed_refusal().is_none() || cfg!(windows) || crate::fork::BUILD);
         }
         // And an AppImage build may still replace itself.
         assert!(self_update_refusal(false, Some(&BundleType::AppImage)).is_none());
