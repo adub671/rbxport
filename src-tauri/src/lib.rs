@@ -30,6 +30,7 @@ mod backup_zip;
 mod backup_sizes;
 mod backup_restore_scripts;
 mod file_journal;
+pub mod library_intake;
 mod new_library;
 mod diagnostics;
 mod explorer;
@@ -678,6 +679,9 @@ pub fn run() {
             commands::playlist_duplicates,
             commands::list_import_files,
             commands::import_files_slice,
+            library_intake::intake_and_import,
+            library_intake::cancel_intake,
+            library_intake::intake_default_enabled,
             commands::reload_tags,
             commands::add_to_tag_list,
             commands::remove_from_tag_list,

@@ -3529,7 +3529,7 @@ const IMPORT_MAX_ENTRIES: usize = 500_000;
 ///
 /// Pure filesystem work, so it runs under `blocking` with the writes below and
 /// never touches the async thread.
-fn expand_import_paths(paths: &[String]) -> Vec<std::path::PathBuf> {
+pub(crate) fn expand_import_paths(paths: &[String]) -> Vec<std::path::PathBuf> {
     let mut files = Vec::new();
     let mut budget = rbl_db::import::WalkBudget::new(IMPORT_MAX_DEPTH, IMPORT_MAX_ENTRIES);
     for path in paths {
@@ -3599,41 +3599,7 @@ async fn import_files_then<R: tauri::Runtime>(
     let writing = Arc::clone(&state);
     let report = blocking("import_files", move || {
         let files = expand_import_paths(&paths);
-        let _gate = writing.edit_gate.lock();
-        let report = writing
-            .write(|writer| {
-                let mut imported = 0_u32;
-                let mut skipped = Vec::new();
-                let mut tracks = Vec::new();
-                let mut existing = Vec::new();
-                // One transaction for the whole batch; a file already in the
-                // library is not a failure, because a drop onto a playlist
-                // still wants that track in the playlist.
-                for (file, outcome) in files.iter().zip(writer.import_files(&files)?) {
-                    let title = file
-                        .file_name()
-                        .map(|name| name.to_string_lossy().into_owned())
-                        .unwrap_or_default();
-                    match outcome {
-                        rbl_db::write::ImportOutcome::Existing(id) => {
-                            existing.push(crate::dto::ImportedTrackDto { id, title });
-                        }
-                        rbl_db::write::ImportOutcome::Added(id) => {
-                            imported += 1;
-                            tracks.push(crate::dto::ImportedTrackDto { id, title });
-                        }
-                        rbl_db::write::ImportOutcome::Refused(reason) => {
-                            skipped.push(rbl_db::write::skipped_file(file, &reason));
-                        }
-                    }
-                }
-                Ok(ImportReportDto { imported, skipped, tracks, existing })
-            })
-            .map_err(write_error)?;
-        if report.imported > 0 {
-            wrote_outside_history(&writing, false);
-        }
-        Ok(report)
+        import_paths(&writing, &files).map(|(report, _)| report)
     })
     .await?;
 
@@ -3646,6 +3612,41 @@ async fn import_files_then<R: tauri::Runtime>(
         announce_history(&app, &state_for_edit);
     }
     Ok(report)
+}
+
+/// Imports `files` in one transaction, without re-reading the library, and
+/// answers each file's outcome beside the report. Blocking.
+pub(crate) fn import_paths(
+    writing: &AppState,
+    files: &[std::path::PathBuf],
+) -> AppResult<(ImportReportDto, Vec<rbl_db::write::ImportOutcome>)> {
+    let _gate = writing.edit_gate.lock();
+    let outcomes = writing.write(|writer| writer.import_files(files)).map_err(write_error)?;
+    let mut report = ImportReportDto { imported: 0, skipped: Vec::new(), tracks: Vec::new(), existing: Vec::new() };
+    // A file already in the library is not a failure, because a drop onto a
+    // playlist still wants that track in the playlist.
+    for (file, outcome) in files.iter().zip(&outcomes) {
+        let title = file
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        match outcome {
+            rbl_db::write::ImportOutcome::Existing(id) => {
+                report.existing.push(crate::dto::ImportedTrackDto { id: id.clone(), title });
+            }
+            rbl_db::write::ImportOutcome::Added(id) => {
+                report.imported += 1;
+                report.tracks.push(crate::dto::ImportedTrackDto { id: id.clone(), title });
+            }
+            rbl_db::write::ImportOutcome::Refused(reason) => {
+                report.skipped.push(rbl_db::write::skipped_file(file, reason));
+            }
+        }
+    }
+    if report.imported > 0 {
+        wrote_outside_history(writing, false);
+    }
+    Ok((report, outcomes))
 }
 
 /// A folder from Finder or Explorer dropped onto the Playlists root or a
