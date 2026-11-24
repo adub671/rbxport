@@ -240,6 +240,8 @@ fn managed_refusal() -> Option<AppError> {
         Some(store_refusal())
     } else if nix_install() {
         Some(nix_refusal())
+    } else if crate::fork::BUILD {
+        Some(AppError::new(ErrorKind::Internal, "This fork build does not update itself; rebuild it from source."))
     } else {
         None
     }
@@ -373,6 +375,11 @@ pub async fn check_for_update(
     if nix_install() {
         *updates.pending.lock() = None;
         return Ok(nix_check(current_version));
+    }
+    if crate::fork::BUILD {
+        // Nothing on offer: the feed's builds are upstream's, not this fork's.
+        *updates.pending.lock() = None;
+        return Ok(UpdateCheckDto { store_install: false, ..store_check(current_version) });
     }
     let found = app
         .updater()

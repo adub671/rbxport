@@ -55,6 +55,8 @@ mod error;
 pub mod state;
 mod test_port;
 mod elevated_update;
+mod fork;
+mod server;
 mod update;
 
 pub use error::{AppError, AppResult, ErrorKind};
@@ -465,6 +467,8 @@ pub fn run() {
             }
             // Listens only in a debug build asked to (`RBXPORT_TEST_PORT`).
             crate::test_port::start(app.handle());
+            // Fork builds only, and only when `fork-server.json` asks.
+            crate::server::start(app.handle());
             // AppleScript: the bridge to the window, and on macOS the
             // scriptable classes, before any Apple Event can arrive.
             crate::scripting::install(app.handle());

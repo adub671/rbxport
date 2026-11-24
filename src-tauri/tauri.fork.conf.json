@@ -1,0 +1,14 @@
+{
+  "productName": "rbxport-fork",
+  "identifier": "com.adub671.rbxport-fork",
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "resources": null,
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": null
+      }
+    }
+  }
+}
