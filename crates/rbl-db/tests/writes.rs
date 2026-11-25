@@ -836,6 +836,89 @@ fn an_emptied_number_box_is_written_as_zero() {
     assert_eq!(number, 0);
 }
 
+/// `(StockDate, DateCreated)` as stored.
+fn dates_of(f: &Fixture, track: &str) -> (Option<String>, Option<String>) {
+    f.conn()
+        .query_row("SELECT StockDate, DateCreated FROM djmdContent WHERE ID = ?1", params![track], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap()
+}
+
+fn fixture_with_dates(track: &str) -> Fixture {
+    let f = fixture();
+    f.conn()
+        .execute(
+            "UPDATE djmdContent SET StockDate = '2024-01-05', DateCreated = '2023-12-31' WHERE ID = ?1",
+            params![track],
+        )
+        .unwrap();
+    f
+}
+
+#[test]
+fn the_date_added_is_written_to_stock_date_and_the_date_created_is_left() {
+    let t = track_id(4);
+    let mut f = fixture_with_dates(&t);
+    let counter: i64 = f.one("SELECT int_1 FROM agentRegistry WHERE registry_id = 'localUpdateCount'", &[]);
+
+    let changed = f.writer.set_field(&t, TrackField::DateAdded, "2020-02-29").unwrap();
+
+    assert_eq!(dates_of(&f, &t), (Some("2020-02-29".to_owned()), Some("2023-12-31".to_owned())));
+    assert_eq!((changed.rows, changed.usn), (1, counter + 1));
+    assert_eq!(stamp_of(&f, &t).0, Some(counter + 1), "the row carries the new USN, as any edited field does");
+    assert_eq!(dates_of(&f, &track_id(5)), (None, None), "no other track is touched");
+}
+
+#[test]
+fn a_date_added_that_is_not_a_calendar_date_is_refused_and_nothing_changes() {
+    let t = track_id(4);
+    let mut f = fixture_with_dates(&t);
+    let kept = stamp_of(&f, &t);
+    for bad in [
+        "", "2024-02-30", "2023-02-29", "1900-02-29", "2024-13-01", "2024-00-10", "2024-04-31", "2024-01-00",
+        "2024-1-5", "24-01-05", "2024/01/05", "20240105", " 2024-01-05", "2024-01-05 ", "2024-01-05 10:00:00",
+        "+024-01-05", "2024-01-05-", "yesterday",
+    ] {
+        assert!(
+            matches!(f.writer.set_field(&t, TrackField::DateAdded, bad), Err(DbError::WriteRefused(_))),
+            "{bad:?} must be refused"
+        );
+        assert!(
+            matches!(f.writer.set_field_with_undo(&t, TrackField::DateAdded, bad), Err(DbError::WriteRefused(_))),
+            "{bad:?} must be refused with undo too"
+        );
+    }
+    assert_eq!(dates_of(&f, &t), (Some("2024-01-05".to_owned()), Some("2023-12-31".to_owned())));
+    assert_eq!(stamp_of(&f, &t), kept, "a refused write leaves the row's USN and updated_at alone");
+
+    // An empty date is refused on a track that has none, where it would
+    // otherwise read as "already shows this".
+    let none = track_id(5);
+    assert!(matches!(
+        f.writer.set_field_with_undo(&none, TrackField::DateAdded, ""),
+        Err(DbError::WriteRefused(_))
+    ));
+}
+
+#[test]
+fn a_date_added_edit_skips_a_track_already_showing_it_and_undoes() {
+    let t = track_id(4);
+    let mut f = fixture_with_dates(&t);
+
+    let (changed, edit) = f.writer.set_field_with_undo(&t, TrackField::DateAdded, "2025-06-30").unwrap();
+    assert_eq!((changed.rows, edit.is_empty()), (1, false));
+    let kept = stamp_of(&f, &t);
+    let (again, same) = f.writer.set_field_with_undo(&t, TrackField::DateAdded, "2025-06-30").unwrap();
+    assert_eq!((again.rows, same.is_empty()), (0, true));
+    assert_eq!(stamp_of(&f, &t), kept, "the track that already had the date is not touched");
+
+    f.writer.undo_track_edit(&edit).unwrap();
+    assert_eq!(dates_of(&f, &t), (Some("2024-01-05".to_owned()), Some("2023-12-31".to_owned())));
+    f.writer.redo_track_edit(&edit).unwrap();
+    assert_eq!(dates_of(&f, &t), (Some("2025-06-30".to_owned()), Some("2023-12-31".to_owned())));
+}
+
 #[test]
 fn a_reference_field_makes_its_lookup_row_once_and_shares_it() {
     let mut f = fixture();
@@ -1004,6 +1087,7 @@ fn the_wire_names_round_trip() {
         ("label", TrackField::Label),
         ("key", TrackField::Key),
         ("bpm", TrackField::Bpm),
+        ("dateAdded", TrackField::DateAdded),
     ] {
         assert_eq!(TrackField::parse(name), Some(field));
     }

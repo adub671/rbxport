@@ -90,6 +90,8 @@ pub struct TrackDetails {
     pub bitrate: u32,
     pub sample_rate: u32,
     pub bit_depth: u32,
+    /// `StockDate`: rekordbox's Date Added, `YYYY-MM-DD`.
+    pub date_added: String,
     pub date_created: String,
     pub release_date: String,
     /// `FolderPath`: the absolute path of the audio file.
@@ -387,6 +389,7 @@ pub const COMPARED_FIELDS: &[(&str, FieldsDiffer)] = &[
     ("bitrate", |a, b| a.bitrate != b.bitrate),
     ("sampleRate", |a, b| a.sample_rate != b.sample_rate),
     ("bitDepth", |a, b| a.bit_depth != b.bit_depth),
+    ("dateAdded", |a, b| a.date_added != b.date_added),
     ("dateCreated", |a, b| a.date_created != b.date_created),
     ("releaseDate", |a, b| a.release_date != b.release_date),
     ("path", |a, b| a.path != b.path),
@@ -572,7 +575,8 @@ fn track_row(conn: &Connection, id: &str) -> Result<Option<TrackDetails>> {
                 c.DeliveryComment, c.ColorID, c.Rating, c.BPM, c.Length,
                 c.ReleaseYear, c.TrackNo, c.DiscNo, c.DJPlayCount, c.FileType,
                 c.FileSize, c.BitRate, c.SampleRate, c.BitDepth, c.DateCreated,
-                c.ReleaseDate, c.FolderPath, c.HotCueAutoLoad, c.DeliveryControl
+                c.ReleaseDate, c.FolderPath, c.HotCueAutoLoad, c.DeliveryControl,
+                c.StockDate
          FROM djmdContent c
          LEFT JOIN djmdArtist artist ON artist.ID = c.ArtistID
          LEFT JOIN djmdAlbum album ON album.ID = c.AlbumID
@@ -626,6 +630,7 @@ fn track_row(conn: &Connection, id: &str) -> Result<Option<TrackDetails>> {
                 bitrate: small(number(r, 32)),
                 sample_rate: small(number(r, 33)),
                 bit_depth: small(number(r, 34)),
+                date_added: text(r, 40),
                 date_created: text(r, 35),
                 release_date: text(r, 36),
                 path: text(r, 37),
@@ -857,7 +862,7 @@ mod tests {
                 Lyricist = 'Words', Subtitle = 'extended mix', DeliveryComment = 'hello',
                 ColorID = '2', Rating = 4, ReleaseYear = 2023, TrackNo = 4, DiscNo = 2,
                 DJPlayCount = 7, FileType = 11, FileSize = 47322584, BitRate = 1411,
-                SampleRate = 44100, BitDepth = 16, DateCreated = '2023-08-06',
+                SampleRate = 44100, BitDepth = 16, StockDate = '2023-08-07', DateCreated = '2023-08-06',
                 ReleaseDate = '2023-08-01', HotCueAutoLoad = 'on', DeliveryControl = 'on'
              WHERE ID = ?1",
             params![track_id(5)],
@@ -890,6 +895,7 @@ mod tests {
         assert_eq!(d.bitrate, 1411);
         assert_eq!(d.sample_rate, 44_100);
         assert_eq!(d.bit_depth, 16);
+        assert_eq!(d.date_added, "2023-08-07");
         assert_eq!(d.date_created, "2023-08-06");
         assert_eq!(d.release_date, "2023-08-01");
         assert!(d.hot_cue_auto_load);
@@ -1056,14 +1062,14 @@ mod tests {
                  LabelID = '8001', KeyID = '9001', Commnt = 'c1', Subtitle = 's1',
                  DeliveryComment = 'm1', ColorID = '1', Rating = 1, Length = 1, ReleaseYear = 1,
                  TrackNo = 1, DiscNo = 1, DJPlayCount = 1, FileType = 1, FileSize = 1, BitRate = 1,
-                 SampleRate = 1, BitDepth = 1, DateCreated = 'd1', ReleaseDate = 'r1',
+                 SampleRate = 1, BitDepth = 1, StockDate = 'a1', DateCreated = 'd1', ReleaseDate = 'r1',
                  HotCueAutoLoad = 'on', DeliveryControl = 'on' WHERE ID = '{a}';
              UPDATE djmdContent SET ArtistID = '6002', AlbumID = '7002', OrgArtistID = '6002',
                  ComposerID = '6002', RemixerID = '6002', Lyricist = 'l2', GenreID = '5002',
                  LabelID = '8002', KeyID = '9002', Commnt = 'c2', Subtitle = 's2',
                  DeliveryComment = 'm2', ColorID = '2', Rating = 2, Length = 2, ReleaseYear = 2,
                  TrackNo = 2, DiscNo = 2, DJPlayCount = 2, FileType = 2, FileSize = 2, BitRate = 2,
-                 SampleRate = 2, BitDepth = 2, DateCreated = 'd2', ReleaseDate = 'r2',
+                 SampleRate = 2, BitDepth = 2, StockDate = 'a2', DateCreated = 'd2', ReleaseDate = 'r2',
                  HotCueAutoLoad = '', DeliveryControl = '' WHERE ID = '{b}';
              UPDATE djmdContent SET rb_local_deleted = 1 WHERE ID = '{gone}';",
             a = ids[0],
