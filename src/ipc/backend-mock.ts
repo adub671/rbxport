@@ -18,7 +18,7 @@ import type {
   AppErrorDto, Backend, Backup, BackupProgress, BackupSizes, Cue, DeckEvent, Device, DeviceSettings, Edits, ExplorerRoot, ExportReport,
   DatabaseDrive, EditHistoryState, FilterValues, GridState, LibraryProblem, LibrarySummary, Limiter, LinkPeerSeen, LinkStatus, RelatedCriterion, RowDto, SortKey,
   SelectionDetails, SmartRule, StickDefaults, SyncPlaylist, SyncProgress, Tick, TrackDetails, TrackField,
-  PreferencesRequest, RelocateSearch, UpdateCheck, UpdateProgress, UpdateReady, ExportProgress,
+  PreferencesRequest, RelocateSearch, UpdateCheck, UpdateProgress, UpdateReady, ExportProgress, IntakeProgress,
   DeckId, TrackFilter, TreeNode, ViewHandle, ViewSpec, WaveformKind, LogLine, LogLevel,
 } from "./types";
 import { TREE_ROOT } from "./types";
@@ -2030,6 +2030,7 @@ export function createMockBackend(options: MockOptions = {}): Backend {
   };
 
   const importListeners = new Set<(progress: ExportProgress) => void>();
+  const intakeListeners = new Set<(progress: IntakeProgress) => void>();
   const wait = <T>(value: T): Promise<T> =>
     latency > 0 ? new Promise((r) => setTimeout(() => r(value), latency)) : Promise.resolve(value);
 
@@ -3182,6 +3183,21 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       localStorage.setItem(dropFixtureKey, JSON.stringify(droppedPaths));
       return wait({ imported: tracks.length, skipped: [], tracks, existing });
     },
+    // No file system in a browser: each dropped path is taken as copied into
+    // the folder under its own name, and imported there.
+    async intakeAndImport(paths, settings) {
+      const folder = settings.layout === "month" ? `${settings.root}/${new Date().toISOString().slice(0, 7)}` : settings.root;
+      const inside = (path: string) => path.startsWith(`${settings.root}/`);
+      const copies = paths.map((path) => inside(path) ? path : `${folder}/${path.split(/[\\/]/).pop() ?? path}`);
+      const copied = paths.filter((path) => !inside(path)).length;
+      intakeListeners.forEach((listener) => listener({ done: copied, total: copied, bytes: 0, totalBytes: 0 }));
+      const report = await this.importPathsSlice(copies);
+      return { ...report, folder, copied, converted: 0, moved: 0, duplicates: [], renamed: [], failed: [],
+        recycled: settings.after === "recycle" ? copied : 0, kept: [], cancelled: false };
+    },
+    cancelIntake: () => wait(undefined),
+    intakeDefaultEnabled: () => wait(false),
+    onIntakeProgress: (listener) => { intakeListeners.add(listener); return () => { intakeListeners.delete(listener); }; },
     // Emits progress, then holds until `window.__finishImport()` so a test
     // can watch the status line while an import is still running. A test
     // sets `window.__xmlSameNamed` to the lists the file would replace: the

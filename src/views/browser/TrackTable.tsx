@@ -887,6 +887,8 @@ export interface TrackTableProps {
    * can actually be added to.
    */
   onDropFiles?: ((files: File[]) => void) | undefined;
+  /** Shown over the list while files hover it: where a drop will copy them. */
+  fileDropNote?: string | undefined;
   onDragError?: ((message: string) => void) | undefined;
   /** Edit a track's rating or comment. Absent where writes are impossible. */
   onRate?: (id: string, stars: number) => void;
@@ -1118,7 +1120,7 @@ function rowKey(row: RowDto | undefined, slot: number | string | bigint, keyed: 
 export const TrackTable = memo(function TrackTable({
   deckTrackIds = NO_DECKS, onShowCollection, spec, onSortChange, onSelectionChange, onTotalsChange, title, query, onQueryChange, searchRef, searchField = "all", onSearchFieldChange,
   columns: layoutColumns, onColumnMove, onColumnResize, onColumnToggle, onColumnAutoSize,
-  onColumnAutoSizeAll, onFocusedRow, onDragTracks, dragging = false, onDropTracks, onDropFiles, onDragError, onRate, onComment, onReorder, onRenumber, subBrowser = false, onEditField, onEditColor, onEditBlocked, seed, onFirstRows,
+  onColumnAutoSizeAll, onFocusedRow, onDragTracks, dragging = false, onDropTracks, onDropFiles, fileDropNote, onDragError, onRate, onComment, onReorder, onRenumber, subBrowser = false, onEditField, onEditColor, onEditBlocked, seed, onFirstRows,
   libraryGeneration, pendingEdits, pendingRows = 0, onSelectedTracks, onAnalyse,
   onShowInformation, onShowInFinder, onRemoveFromPlaylist, onRemoveFromHistory, onResetPlayCount,
   onRemoveFromCollection, onAutoRelocate, onRelocate, onConvertMemoryCues, readOnly = false,
@@ -2308,6 +2310,7 @@ export const TrackTable = memo(function TrackTable({
         onDropFiles(Array.from(e.dataTransfer.files));
       }}
     >
+      {fileOver && fileDropNote ? <div className={styles.intakeOverlay} data-testid="intake-overlay">{fileDropNote}</div> : null}
       <div className={styles.browserHead}>
         <span className={styles.title} data-testid="browser-title">
           {/*

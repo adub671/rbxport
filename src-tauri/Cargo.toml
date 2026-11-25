@@ -69,6 +69,10 @@ sentry = { version = "0.46", default-features = false, features = ["backtrace", 
 
 zip = { version = "4.6.1", default-features = false, features = ["deflate"] }
 tempfile = "3"
+# Library intake (`library_intake.rs`): originals go to the OS trash, never a
+# permanent delete, and a converted file keeps its source's tags and artwork.
+trash = "5"
+lofty = { version = "0.22", default-features = false }
 
 [dev-dependencies]
 rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
@@ -77,9 +81,6 @@ rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"]
 tauri = { version = "2", features = ["test"] }
 # The database server's side of a link test: what a player is answered.
 rbl-dbserver = { path = "../crates/rbl-dbserver" }
-# Tags written into fixture audio files, for Reload Tag (#503).
-lofty = { version = "0.22", default-features = false }
-
 # macOS builds menu items on the main thread only, and the test harness runs
 # every test on a spawned one. Without a harness, `main` is the main thread.
 [[test]]

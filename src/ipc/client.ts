@@ -11,7 +11,7 @@ import type {
   DevicePlaylistEditResult, DevicePlaylistImportPlan, DevicePlaylistImportResult, DeviceSettings, DeviceSyncState,
   Diagnostics, Duplicates, LogPage, GridState, Limiter, PreferencesRequest, SmartRule, SyncDeviceReport, SyncProgress, UpdateCheck,
   UpdateProgress, UpdateReady, XmlImportReport,
-  ExportProgress, ExportReport, ExplorerChildren, ExplorerRoot, FilterValues, FolderPlaylistReport, Phrase, ImportReport,
+  ExportProgress, ExportReport, ExplorerChildren, ExplorerRoot, FilterValues, FolderPlaylistReport, Phrase, ImportReport, IntakeProgress, IntakeReport,
   DatabaseDrive, EditHistoryState, ItunesLibrary, LibraryProblem, LibrarySummary, LinkPeerSeen, Meters,
   LinkStatus, MissingExportFile, MissingTrack, MissingTracks, PreviewState, UnanalysedTracks, ReferenceStickSettings, RelocateReport, RowDto, ScriptRequest, Tick,
   TreeNode, ViewHandle,
@@ -46,7 +46,7 @@ export async function droppedFilePaths(files: File[]): Promise<string[]> {
 
 /** The part of WebView2's `window.chrome.webview` used for dropped files. */
 interface WebView2Bridge {
-  postMessageWithAdditionalObjects?: (message: unknown, objects: File[]) => void;
+  postMessageWithAdditionalObjects?: (message: string, objects: File[]) => void;
   addEventListener: (type: "message", listener: (event: { data: unknown }) => void) => void;
   removeEventListener: (type: "message", listener: (event: { data: unknown }) => void) => void;
 }
@@ -89,7 +89,9 @@ function webview2FilePaths(webview: WebView2Bridge, files: File[]): Promise<stri
     }, WEBVIEW2_DROP_TIMEOUT_MS);
     webview.addEventListener("message", onMessage);
     try {
-      webview.postMessageWithAdditionalObjects?.({ [WEBVIEW2_DROP_KEY]: id }, files);
+      // A string: wry's handler fails on anything else, and the host's
+      // handler behind it is then never called.
+      webview.postMessageWithAdditionalObjects?.(`{"${WEBVIEW2_DROP_KEY}":"${id}"}`, files);
     } catch {
       finish();
       reject(new Error(unavailable));
@@ -267,6 +269,10 @@ async function realBackend(): Promise<Backend> {
     importPaths: (paths) => invoke<ImportReport>("import_files", { paths }),
     listImportFiles: (paths) => invoke<string[]>("list_import_files", { paths }),
     importPathsSlice: (paths) => invoke<ImportReport>("import_files_slice", { paths }),
+    intakeAndImport: (paths, settings) => invoke<IntakeReport>("intake_and_import", { paths, settings }),
+    cancelIntake: () => invoke<void>("cancel_intake"),
+    intakeDefaultEnabled: () => invoke<boolean>("intake_default_enabled"),
+    onIntakeProgress: (listener) => subscribe<IntakeProgress>("intake:progress", listener),
     importFolderPlaylist: (path, parent, replace, at, copy) =>
       invoke<FolderPlaylistReport>("import_folder_playlist", {
         path, parent, replace: replace ?? null, at: at ?? null, copy: copy ?? null,

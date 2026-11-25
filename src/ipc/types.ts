@@ -478,6 +478,18 @@ export interface Backend {
    */
   importPathsSlice(paths: string[]): Promise<ImportReport>;
   /**
+   * Preferences › Import's copy into the library folder: copies (or converts)
+   * the dropped files and folders into `settings.root`, imports the copies as
+   * they land, reloads the library once, and recycles verified, imported
+   * originals when asked. Adding to a playlist is the caller's.
+   */
+  intakeAndImport(paths: string[], settings: IntakeSettings): Promise<IntakeReport>;
+  /** Stops the running intake between files; what was copied is still imported. */
+  cancelIntake(): Promise<void>;
+  /** Whether copying dropped files into the library folder starts out on in this build. */
+  intakeDefaultEnabled(): Promise<boolean>;
+  onIntakeProgress(listener: (progress: IntakeProgress) => void): () => void;
+  /**
    * A folder from Finder or Explorer dropped onto the Playlists root or a
    * playlist folder: one playlist under `parent` named after the folder,
    * holding every audio file under it with subfolders flattened, as
@@ -1793,6 +1805,43 @@ export interface ImportReport {
   tracks: { id: string; title: string }[];
   /** Files that were already in the library, with their existing track ids. */
   existing: { id: string; title: string }[];
+}
+
+/** Preferences › Import as one drop's intake needs it. */
+export interface IntakeSettings {
+  root: string;
+  layout: "month" | "flat";
+  after: "keep" | "recycle";
+  /** Same file name and byte size counts as already in the library. */
+  duplicates: boolean;
+}
+
+/** What a drop into the library folder came to. */
+export interface IntakeReport extends ImportReport {
+  /** The folder new files went to. */
+  folder: string;
+  copied: number;
+  converted: number;
+  /** Renamed into place on the same drive, so no original is left. */
+  moved: number;
+  /** File names judged already in the library and not copied. */
+  duplicates: string[];
+  /** "old → new" for each copy that took a free name. */
+  renamed: string[];
+  /** "name: reason" for each file not copied or not imported after copying. */
+  failed: string[];
+  recycled: number;
+  /** "name: reason" for each original kept although recycling was asked for. */
+  kept: string[];
+  cancelled: boolean;
+}
+
+/** `intake:progress`, at most ten a second. */
+export interface IntakeProgress {
+  done: number;
+  total: number;
+  bytes: number;
+  totalBytes: number;
 }
 
 /** What dropping one folder onto the playlist tree did. */
