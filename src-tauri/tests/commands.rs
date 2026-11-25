@@ -3000,6 +3000,25 @@ fn relocate_refuses_a_file_the_collection_already_holds() {
     assert_eq!(s.state().library().unwrap().audio_path_of(&track_id(1)), Some(free.as_str()));
 }
 
+/// A track's own file is not "already in the collection" for that track:
+/// choosing it under another spelling of its separators rewrites the stored
+/// path as chosen. For any other track the file is still held.
+#[test]
+fn relocate_to_the_tracks_own_file_respells_its_path() {
+    let s = shell();
+    let own = write_wav(&s._dir.path().join("own.wav"), 1).display().to_string();
+    let doubled = format!("{}//own.wav", s._dir.path().display());
+    assert!(run(commands::relocate_track(s.handle(), s.state(), track_id(1), doubled.clone())).unwrap());
+    assert_eq!(file_link(&s, &track_id(1)).0.as_deref(), Some(doubled.as_str()));
+
+    assert!(!run(commands::relocate_track(s.handle(), s.state(), track_id(2), own.clone())).unwrap(), "another track's file");
+    assert_eq!(file_link(&s, &track_id(1)).0.as_deref(), Some(doubled.as_str()), "nothing written");
+
+    assert!(run(commands::relocate_track(s.handle(), s.state(), track_id(1), own.clone())).unwrap(), "its own file");
+    assert_eq!(file_link(&s, &track_id(1)).0.as_deref(), Some(own.as_str()));
+    assert_eq!(commands::current_history(&s.state()).undo_label.as_deref(), Some("Relocate"));
+}
+
 /// `FolderPath`, `FileNameL` and `rb_file_id` of a track, as stored.
 fn file_link(s: &Shell, track: &str) -> (Option<String>, Option<String>, Option<String>) {
     let db = Db::open(s.location.clone(), OpenMode::ReadOnly).unwrap();
