@@ -1944,7 +1944,7 @@ impl Writer {
 
         // `insert_files` counts its own USNs up from one `next_usn` read; the
         // playlist rows below start past them.
-        let (imported, _) = insert_files(&tx, &mut self.rng, &paths, tags, &stamp)?;
+        let (imported, _) = insert_files(&tx, &mut self.rng, &paths, tags, &stamp, cfg!(windows))?;
         let mut members = Vec::with_capacity(paths.len());
         for (file, imported) in paths.iter().zip(imported) {
             match imported {
@@ -2398,7 +2398,7 @@ impl Writer {
 
         let tx = self.library.connection_mut()
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let (outcomes, _) = insert_files(&tx, &mut self.rng, &files, tags, &stamp)?;
+        let (outcomes, _) = insert_files(&tx, &mut self.rng, &files, tags, &stamp, cfg!(windows))?;
         let mut added: Vec<(String, PathBuf)> = Vec::new();
         let mut made = outcomes.into_iter().zip(&files);
         let mut contents: Vec<String> = Vec::with_capacity(entries.len());
@@ -2946,18 +2946,7 @@ impl Writer {
     /// [`Self::import_file`] cleans it, so the two agree on what "already
     /// there" means.
     pub fn track_id_at(&self, path: &Path) -> Result<Option<String>> {
-        let path = normalized(path);
-        let folder = path.to_string_lossy().into_owned();
-        let id = self
-            .library
-            .connection()
-            .query_row(
-                "SELECT ID FROM djmdContent WHERE FolderPath = ?1 AND rb_local_deleted = 0 ORDER BY ID LIMIT 1",
-                params![folder],
-                |r| r.get::<_, String>(0),
-            )
-            .optional()?;
-        Ok(id)
+        held_at(self.library.connection(), &folder_path(&normalized(path), cfg!(windows)), cfg!(windows))
     }
 
     /// Adds a file to the library, returning the new track's id.
@@ -2985,7 +2974,7 @@ impl Writer {
         let uuid = self.rng.uuid4();
         let stamp = time::now();
         let today = stamp.get(..10).unwrap_or_default().to_owned();
-        let folder = path.to_string_lossy().into_owned();
+        let folder = folder_path(path, cfg!(windows));
         // The library's own device: `djmdProperty` names it, and every one of
         // the 645 rows rekordbox 7 imported on this machine carries the pair.
         let (master_db, device): (Option<String>, Option<String>) = self
@@ -3003,12 +2992,7 @@ impl Writer {
 
         // Already in the library: importing again would give one file two
         // rows, and every playlist pointing at the wrong one.
-        let existing: i64 = tx.query_row(
-            "SELECT COUNT(*) FROM djmdContent WHERE FolderPath = ?1 AND rb_local_deleted = 0",
-            params![folder],
-            |r| r.get(0),
-        )?;
-        if existing > 0 {
+        if held_at(&tx, &folder, cfg!(windows))?.is_some() {
             return Err(DbError::WriteRefused(format!(
                 "{} is already in the library",
                 path.display()
@@ -3054,7 +3038,7 @@ impl Writer {
 
         let tx = self.library.connection_mut()
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let (outcomes, last_usn) = insert_files(&tx, &mut self.rng, &paths, tags, &stamp)?;
+        let (outcomes, last_usn) = insert_files(&tx, &mut self.rng, &paths, tags, &stamp, cfg!(windows))?;
         if let Some(usn) = last_usn {
             set_counter(&tx, usn)?;
         }
@@ -5258,7 +5242,7 @@ impl Writer {
     /// does not write that column (7.2.19 arm64, #454). Auto Relocate keeps
     /// its existing writer path while its UI remains hidden under #415.
     pub fn relocate_manual_with_undo(&mut self, moves: &[(String, PathBuf)]) -> Result<(Changed, TrackRelocation)> {
-        self.relocate_with_name_policy(moves, true)
+        self.relocate_with_name_policy(moves, true, cfg!(windows))
     }
 
     /// Points each track of `moves` at its file in one transaction for the
@@ -5269,10 +5253,10 @@ impl Writer {
     /// twice is moved by its first entry; one not in the collection is
     /// passed over.
     pub fn relocate_with_undo(&mut self, moves: &[(String, PathBuf)]) -> Result<(Changed, TrackRelocation)> {
-        self.relocate_with_name_policy(moves, false)
+        self.relocate_with_name_policy(moves, false, cfg!(windows))
     }
 
-    fn relocate_with_name_policy(&mut self, moves: &[(String, PathBuf)], preserve_name: bool) -> Result<(Changed, TrackRelocation)> {
+    fn relocate_with_name_policy(&mut self, moves: &[(String, PathBuf)], preserve_name: bool, windows: bool) -> Result<(Changed, TrackRelocation)> {
         for (_, path) in moves {
             if !path.is_file() {
                 return Err(DbError::WriteRefused(format!(
@@ -5302,7 +5286,7 @@ impl Writer {
                     .unwrap_or_default())
             };
             let after = [
-                Value::Text(path.to_string_lossy().into_owned()),
+                Value::Text(folder_path(path, windows)),
                 name,
                 Value::Text(crate::file_id::column(path)),
             ];
@@ -5787,6 +5771,7 @@ fn insert_files(
     paths: &[PathBuf],
     tags: Vec<std::result::Result<crate::import::TrackTags, crate::import::ImportError>>,
     stamp: &str,
+    windows: bool,
 ) -> Result<(Vec<ImportOutcome>, Option<i64>)> {
     use std::collections::HashMap;
 
@@ -5800,9 +5785,10 @@ fn insert_files(
 
     // Where the library already holds each path, the lowest id first as
     // `track_id_at` answers it. One pass over the table, kept for the
-    // paths of this batch only.
+    // paths of this batch only, each side in rekordbox's spelling so a row
+    // stored with the other separator on Windows is the same file.
     let wanted: std::collections::HashSet<String> =
-        paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        paths.iter().map(|p| folder_path(p, windows)).collect();
     let mut held: HashMap<String, String> = HashMap::new();
     {
         let mut stmt = tx.prepare(
@@ -5811,6 +5797,7 @@ fn insert_files(
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
             let folder: Option<String> = row.get(0)?;
+            let folder = folder.map(|f| crate::locate::setting_path(&f, windows));
             if let Some(folder) = folder.filter(|f| wanted.contains(f)) {
                 held.entry(folder).or_insert(row.get::<_, String>(1)?);
             }
@@ -5823,7 +5810,7 @@ fn insert_files(
     let mut outcomes = Vec::with_capacity(paths.len());
 
     for (path, tags) in paths.iter().zip(tags) {
-        let folder = path.to_string_lossy().into_owned();
+        let folder = folder_path(path, windows);
         if let Some(id) = held.get(&folder) {
             outcomes.push(ImportOutcome::Existing(id.clone()));
             continue;
@@ -6529,6 +6516,29 @@ fn normalized(path: &Path) -> PathBuf {
     out
 }
 
+/// A file's path as rekordbox stores it in `FolderPath`: on Windows with
+/// forward slashes, `F:/music/a.aiff`, as it writes `masterDbDirectory`
+/// [OBS rekordbox on Windows, the 15,176 rows it wrote in one library,
+/// 2026-11-24]. Elsewhere a `\` is part of a name and stays.
+fn folder_path(path: &Path, windows: bool) -> String {
+    crate::locate::setting_path(&path.to_string_lossy(), windows)
+}
+
+/// The live track stored at `folder`, a path [`folder_path`] spelled; the
+/// lowest id when several are. On Windows a row stored with `\` is the same
+/// file.
+fn held_at(conn: &Connection, folder: &str, windows: bool) -> Result<Option<String>> {
+    conn.query_row(
+        "SELECT ID FROM djmdContent
+         WHERE (FolderPath = ?1 OR (?2 AND replace(FolderPath, '\\', '/') = ?1)) AND rb_local_deleted = 0
+         ORDER BY ID LIMIT 1",
+        params![folder, windows],
+        |r| r.get(0),
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
 /// The `djmdKey` row for a key a file's tag names, made when the library has
 /// none of that name; `None` for no key.
 ///
@@ -7023,5 +7033,85 @@ fn prune_backups(dir: &Path, keep: usize) {
             drop(std::fs::remove_file(with_suffix(&path, suffix)));
         }
         drop(std::fs::remove_file(path));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+    use crate::fixture::{self, track_id, Shape};
+
+    fn writer(dir: &Path) -> Writer {
+        let location = fixture::build(dir, Shape::default()).unwrap();
+        Writer::open(location, dir.join("backups")).unwrap()
+    }
+
+    /// What [`insert_files`] makes of one path, on Windows or off it. The
+    /// file need not be there: its tags are handed in.
+    fn import(writer: &mut Writer, path: &str, windows: bool) -> ImportOutcome {
+        let tx = writer.library.connection_mut().transaction().unwrap();
+        let tags = vec![Ok(crate::import::TrackTags::default())];
+        let (mut outcomes, _) =
+            insert_files(&tx, &mut writer.rng, &[PathBuf::from(path)], tags, &time::now(), windows).unwrap();
+        tx.commit().unwrap();
+        outcomes.remove(0)
+    }
+
+    fn added(outcome: ImportOutcome) -> String {
+        match outcome {
+            ImportOutcome::Added(id) => id,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    fn stored(writer: &Writer, id: &str) -> String {
+        writer
+            .library
+            .connection()
+            .query_row("SELECT FolderPath FROM djmdContent WHERE ID = ?1", [id], |r| r.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn an_import_on_windows_stores_forward_slashes() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut w = writer(dir.path());
+        let id = added(import(&mut w, "F:\\music_merged\\2026-11\\a.aiff", true));
+        assert_eq!(stored(&w, &id), "F:/music_merged/2026-11/a.aiff");
+
+        let id = added(import(&mut w, "/music/AC\\DC.aiff", false));
+        assert_eq!(stored(&w, &id), "/music/AC\\DC.aiff", "off Windows the `\\` is part of the name");
+    }
+
+    #[test]
+    fn on_windows_a_file_is_held_under_either_separator() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut w = writer(dir.path());
+        let old = added(import(&mut w, "F:\\a\\b.aiff", false));
+        assert_eq!(stored(&w, &old), "F:\\a\\b.aiff", "as an import stored it before it took rekordbox's spelling");
+
+        assert_eq!(import(&mut w, "F:/a/b.aiff", true), ImportOutcome::Existing(old.clone()));
+        assert_eq!(import(&mut w, "F:\\a\\b.aiff", true), ImportOutcome::Existing(old.clone()));
+        assert_eq!(held_at(w.library.connection(), "F:/a/b.aiff", true).unwrap(), Some(old));
+
+        assert_eq!(held_at(w.library.connection(), "F:/a/b.aiff", false).unwrap(), None);
+        assert!(matches!(import(&mut w, "F:/a/b.aiff", false), ImportOutcome::Added(_)), "two files off Windows");
+    }
+
+    #[test]
+    fn a_relocate_on_windows_respells_the_path_with_forward_slashes() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut w = writer(dir.path());
+        // One file here, with a `\` in its name; the flag reads it as Windows would.
+        let moves = [(track_id(0), dir.path().join("moved\\a.aiff"))];
+        std::fs::write(&moves[0].1, b"").unwrap();
+        let at = |tail: &str| format!("{}/moved{tail}", dir.path().display());
+
+        w.relocate_with_name_policy(&moves, true, false).unwrap();
+        assert_eq!(stored(&w, &track_id(0)), at("\\a.aiff"));
+
+        w.relocate_with_name_policy(&moves, true, true).unwrap();
+        assert_eq!(stored(&w, &track_id(0)), at("/a.aiff"), "the same file, respelled");
     }
 }

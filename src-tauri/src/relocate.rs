@@ -876,16 +876,6 @@ fn moved_like(path: &str, file_name: &str, from: &str, to: &str, exists: impl Fn
     exists(&moved).then_some(moved)
 }
 
-/// A path built with `/` in Windows' own separators, as `juce::File` keeps
-/// it, so the library stores what rekordbox would.
-fn native(path: PathBuf) -> PathBuf {
-    if cfg!(windows) {
-        PathBuf::from(path.to_string_lossy().replace('/', "\\"))
-    } else {
-        path
-    }
-}
-
 /// Relocate's "find other missing file using the location of this track":
 /// each named track still missing whose file turns up where
 /// [`moved_like`] looks, and is not already another track in the
@@ -917,7 +907,7 @@ pub async fn relocate_by_location<R: tauri::Runtime>(
                 }
                 let name = file_name(path)?;
                 // perf-ok: a `stat` or two per track, under `blocking`.
-                let moved = native(moved_like(path, &name, &from, &to, Path::is_file)?);
+                let moved = moved_like(path, &name, &from, &to, Path::is_file)?;
                 library.row_for_path(&moved).is_none().then(|| (id.clone(), moved))
             })
             .collect();
