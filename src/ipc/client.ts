@@ -91,7 +91,7 @@ function webview2FilePaths(webview: WebView2Bridge, files: File[]): Promise<stri
     try {
       // A string: wry's handler fails on anything else, and the host's
       // handler behind it is then never called.
-      webview.postMessageWithAdditionalObjects?.(JSON.stringify({ [WEBVIEW2_DROP_KEY]: id }), files);
+      webview.postMessageWithAdditionalObjects?.(`{"${WEBVIEW2_DROP_KEY}":"${id}"}`, files);
     } catch {
       finish();
       reject(new Error(unavailable));
