@@ -3769,7 +3769,10 @@ pub(crate) const RELOCATE_LABEL: &str = "Relocate";
 /// [OBS rekordbox 7.2.19 static, `MissingFileTable::showFileChooser`
 /// @0x1012a8408] A file the collection already holds is refused with "This
 /// file is already in the collection." and nothing is written; the answer
-/// is then `false`.
+/// is then `false`. The track's own file is not held against it. Choosing
+/// it stores the path again in the writer's spelling, which turns a path
+/// stored with `\` on Windows into rekordbox's `/`. That part is this
+/// fork's; see `FORK.md`.
 #[tauri::command]
 pub async fn relocate_track<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -3779,7 +3782,11 @@ pub async fn relocate_track<R: tauri::Runtime>(
 ) -> AppResult<bool> {
     let library = state.library()?;
     let chosen = std::path::PathBuf::from(&path);
-    let held = blocking("relocate_track_check", move || Ok(library.row_for_path(&chosen).is_some())).await?;
+    let own = track.clone();
+    let held = blocking("relocate_track_check", move || {
+        Ok(library.row_for_path(&chosen).is_some_and(|row| library.row_of(&own) != Some(row)))
+    })
+    .await?;
     if held {
         return Ok(false);
     }

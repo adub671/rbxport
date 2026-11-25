@@ -12,6 +12,7 @@ A personal fork of [chrisle/rbxport](https://github.com/chrisle/rbxport). It ins
 | Server mode | [`src-tauri/src/server.rs`](src-tauri/src/server.rs) | The app's commands over loopback HTTP, for scripts and agents |
 | Hosted Windows build | [`.github/workflows/fork-windows.yml`](.github/workflows/fork-windows.yml) | Upstream's release workflows need its runners and signing keys |
 | Date Added edit | `TrackField::DateAdded` in [`crates/rbl-db/src/write.rs`](crates/rbl-db/src/write.rs) | `set_track_field` takes the field `dateAdded`. It is compiled into every build, and no screen sends it |
+| Forward-slash track paths | `folder_path` in [`crates/rbl-db/src/write.rs`](crates/rbl-db/src/write.rs), `relocate_track` in [`src-tauri/src/commands.rs`](src-tauri/src/commands.rs) | On Windows an import or a relocate stores `FolderPath` as rekordbox does, `F:/music/a.aiff`, and a row stored with `\` counts as the same file. `relocate_track` accepts a track's own file and stores its path again in that spelling. It is compiled into every build |
 
 Logs, backups and the analysis journal stay in the same `rbxport` data folder stock uses. Preferences are separate, because they belong to the identifier.
 

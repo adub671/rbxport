@@ -397,7 +397,7 @@ impl Sources {
 /// A folder as rekordbox writes it into `masterDbDirectory`: with forward
 /// slashes on Windows, `C:/Users/chris/AppData/Roaming/Pioneer/rekordbox`
 /// [OBS rekordbox 7.2.x, chris-win11 2026-10-08].
-fn setting_path(dir: &str, windows: bool) -> String {
+pub(crate) fn setting_path(dir: &str, windows: bool) -> String {
     if windows { dir.replace('\\', "/") } else { dir.to_owned() }
 }
 
