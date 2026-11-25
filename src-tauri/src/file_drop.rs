@@ -127,8 +127,9 @@ pub fn install_webview2_bridge(window: &tauri::WebviewWindow) {
     let installed = window.with_webview(|webview| {
         // SAFETY: `with_webview` runs this on the thread that owns the
         // WebView2 controller.
-        if let Err(error) = unsafe { webview2::listen(&webview.controller()) } {
-            tracing::warn!(%error, "dropped files' paths unavailable: WebView2 refused the message handler");
+        match unsafe { webview2::listen(&webview.controller()) } {
+            Ok(()) => tracing::debug!("listening for dropped files' paths"),
+            Err(error) => tracing::warn!(%error, "dropped files' paths unavailable: WebView2 refused the message handler"),
         }
     });
     if let Err(error) = installed {
@@ -165,9 +166,13 @@ mod webview2 {
                 return Ok(());
             };
             // SAFETY: as above.
-            let answer = reply(&id, unsafe { dropped_paths(&args) });
+            let paths = unsafe { dropped_paths(&args) };
+            tracing::debug!(files = paths.as_ref().map_or(0, Vec::len), "the page asked for dropped files' paths");
+            let answer = reply(&id, paths);
             // SAFETY: as above.
-            unsafe { sender.PostWebMessageAsJson(&HSTRING::from(answer)) }
+            unsafe { sender.PostWebMessageAsJson(&HSTRING::from(answer)) }.inspect_err(|error| {
+                tracing::warn!(%error, "WebView2 refused the dropped files' paths answer");
+            })
         }));
         let mut token = 0_i64;
         // SAFETY: the caller is on the controller's thread; the handler lives
