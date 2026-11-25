@@ -29,8 +29,8 @@ beforeEach(() => {
 function fakeWebView2(answer: (request: Record<string, unknown>, files: File[]) => Record<string, unknown> | undefined) {
   const listeners = new Set<(event: { data: unknown }) => void>();
   const webview = {
-    postMessageWithAdditionalObjects: vi.fn((message: Record<string, unknown>, files: File[]) => {
-      const reply = answer(message, files);
+    postMessageWithAdditionalObjects: vi.fn((message: string, files: File[]) => {
+      const reply = answer(JSON.parse(message) as Record<string, unknown>, files);
       // The host answers asynchronously, after other pages' traffic.
       queueMicrotask(() => {
         for (const listener of [...listeners]) listener({ data: { unrelated: true } });
@@ -53,8 +53,8 @@ it("resolves Explorer drops through WebView2's additional objects on Windows", a
   const files = [new File([], "é #.mp3"), new File([], "b.mp3")];
   expect(await droppedFilePaths(files)).toEqual(["C:\\Users\\dj\\Music\\é #.mp3", "C:\\Users\\dj\\Music\\b.mp3"]);
   const [request, posted] = webview.postMessageWithAdditionalObjects.mock.calls[0] ?? [];
-  // An object, not a string, so wry hands it to neither Tauri nor its IPC.
-  expect(request).toEqual({ rbxportDroppedFiles: expect.any(String) });
+  // A string: wry's handler fails on an object, and the host never hears it.
+  expect(JSON.parse(request ?? "")).toEqual({ rbxportDroppedFiles: expect.any(String) });
   expect(posted).toBe(files);
   expect(invoke).not.toHaveBeenCalled();
   expect(listeners.size).toBe(0);

@@ -46,7 +46,7 @@ export async function droppedFilePaths(files: File[]): Promise<string[]> {
 
 /** The part of WebView2's `window.chrome.webview` used for dropped files. */
 interface WebView2Bridge {
-  postMessageWithAdditionalObjects?: (message: unknown, objects: File[]) => void;
+  postMessageWithAdditionalObjects?: (message: string, objects: File[]) => void;
   addEventListener: (type: "message", listener: (event: { data: unknown }) => void) => void;
   removeEventListener: (type: "message", listener: (event: { data: unknown }) => void) => void;
 }
@@ -89,7 +89,9 @@ function webview2FilePaths(webview: WebView2Bridge, files: File[]): Promise<stri
     }, WEBVIEW2_DROP_TIMEOUT_MS);
     webview.addEventListener("message", onMessage);
     try {
-      webview.postMessageWithAdditionalObjects?.({ [WEBVIEW2_DROP_KEY]: id }, files);
+      // A string: wry's handler fails on anything else, and the host's
+      // handler behind it is then never called.
+      webview.postMessageWithAdditionalObjects?.(JSON.stringify({ [WEBVIEW2_DROP_KEY]: id }), files);
     } catch {
       finish();
       reject(new Error(unavailable));

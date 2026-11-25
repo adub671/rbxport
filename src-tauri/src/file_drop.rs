@@ -100,6 +100,12 @@ fn validate_paths(names: &[String], paths: Vec<String>) -> Result<Vec<String>, S
 #[cfg(any(windows, test))]
 fn request_id(message_json: &str) -> Option<String> {
     let value: serde_json::Value = serde_json::from_str(message_json).ok()?;
+    // The page posts the request as a string holding JSON; an object is
+    // still read, for a page that posts one.
+    let value = match value {
+        serde_json::Value::String(text) => serde_json::from_str(&text).ok()?,
+        other => other,
+    };
     value.get(REQUEST_KEY)?.as_str().map(str::to_owned)
 }
 
@@ -119,8 +125,11 @@ fn reply(id: &str, paths: Result<Vec<String>, String>) -> String {
 
 /// Answer the page's requests for dropped files' paths on Windows.
 ///
-/// The request is a JSON object, not a string, so wry's own handler (which
-/// reads only string messages) skips it and Tauri never sees it.
+/// The request is a string, because wry's own handler runs first, fails on
+/// any message that is not one, and `WebView2` then calls no later handler:
+/// an object request was never delivered here [OBS Windows 11, `WebView2`
+/// 158.0.4370.33, wry 0.55.1]. Tauri reads the string too, finds no command
+/// in it, and drops it.
 #[cfg(windows)]
 #[allow(unsafe_code)]
 pub fn install_webview2_bridge(window: &tauri::WebviewWindow) {
@@ -218,6 +227,8 @@ mod tests {
     #[test]
     fn answers_only_requests_for_dropped_files() {
         assert_eq!(request_id(r#"{"rbxportDroppedFiles":"7f"}"#), Some("7f".into()));
+        // What the page posts: a string holding the request.
+        assert_eq!(request_id(r#""{\"rbxportDroppedFiles\":\"7f\"}""#), Some("7f".into()));
         // Tauri's own IPC and anything else the page posts are not ours.
         assert_eq!(request_id(r#""{\"cmd\":\"x\"}""#), None);
         assert_eq!(request_id(r#"{"cmd":"dropped_file_paths"}"#), None);
