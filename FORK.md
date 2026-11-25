@@ -11,6 +11,7 @@ A personal fork of [chrisle/rbxport](https://github.com/chrisle/rbxport). It ins
 | No self-update | [`src-tauri/src/update.rs`](src-tauri/src/update.rs) | The release feed's builds are upstream's. A check answers "nothing on offer" |
 | Server mode | [`src-tauri/src/server.rs`](src-tauri/src/server.rs) | The app's commands over loopback HTTP, for scripts and agents |
 | Hosted Windows build | [`.github/workflows/fork-windows.yml`](.github/workflows/fork-windows.yml) | Upstream's release workflows need its runners and signing keys |
+| Date Added edit | `TrackField::DateAdded` in [`crates/rbl-db/src/write.rs`](crates/rbl-db/src/write.rs) | `set_track_field` takes the field `dateAdded`. It is compiled into every build, and no screen sends it |
 
 Logs, backups and the analysis journal stay in the same `rbxport` data folder stock uses. Preferences are separate, because they belong to the identifier.
 
@@ -27,6 +28,13 @@ The app then listens on `127.0.0.1:48650`. Every request carries `Authorization:
 ```bash
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:48650/version
 curl -H "Authorization: Bearer $TOKEN" -d '{}' http://127.0.0.1:48650/invoke/library_summary
+```
+
+These two calls change a track's Date Added and read it back. The value must be a real date written `YYYY-MM-DD`, and Undo in the app restores the old one.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -d '{"tracks":["<track id>"],"field":"dateAdded","value":"2024-03-09"}' http://127.0.0.1:48650/invoke/set_track_field
+curl -H "Authorization: Bearer $TOKEN" -d '{"track":"<track id>"}' http://127.0.0.1:48650/invoke/track_details
 ```
 
 `POST /invoke/<command>` takes a JSON object of the command's arguments in camelCase. The commands are the ones in the `generate_handler!` list in [`src-tauri/src/lib.rs`](src-tauri/src/lib.rs), and the argument names are each Rust function's parameters. A command's own error comes back as HTTP 422 with `{kind, message}`.

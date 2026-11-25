@@ -779,6 +779,40 @@ fn library_history_names_and_reverses_each_supported_edit() {
     assert_eq!(run(details::track_details(s.state(), track)).unwrap().title, "Seven");
 }
 
+/// Date Added through `set_track_field`, the call server mode makes: the
+/// record and the track list both show the new date, a value that is not a
+/// calendar date is refused with nothing written, and Undo puts the old one
+/// back.
+#[test]
+fn the_date_added_is_set_read_back_refused_when_malformed_and_undone() {
+    let s = shell();
+    let track = track_id(7);
+    let set = |value: &str| {
+        run(details::set_track_field(s.handle(), s.state(), vec![track.clone()], "dateAdded".into(), value.into(), None))
+    };
+    let shown = || run(details::track_details(s.state(), track.clone())).unwrap();
+    let listed = || {
+        let (view, _) = s.open(collection_spec());
+        s.rows(view).into_iter().find(|row| row.id == track).unwrap().date_added
+    };
+
+    let edited = set("2024-03-09").unwrap();
+    assert_eq!(edited.undo_label.as_deref(), Some("Track Edit"));
+    assert_eq!((shown().date_added.as_str(), shown().date_created.as_str()), ("2024-03-09", ""));
+    assert_eq!(listed(), "2024-03-09");
+    assert_eq!(serde_json::to_value(shown()).unwrap()["dateAdded"], "2024-03-09");
+
+    for bad in ["2024-02-30", "09/03/2024", ""] {
+        assert_eq!(set(bad).unwrap_err().kind, ErrorKind::ReadOnly, "{bad:?}");
+    }
+    assert_eq!(shown().date_added, "2024-03-09");
+
+    run(commands::undo_edit(s.handle(), s.state())).unwrap();
+    assert_eq!((shown().date_added.as_str(), listed().as_str()), ("", ""));
+    run(commands::redo_edit(s.handle(), s.state())).unwrap();
+    assert_eq!(shown().date_added, "2024-03-09");
+}
+
 /// `parent`'s live children as `(ID, Seq)` in tree order, read from the file.
 fn child_seqs(s: &Shell, parent: &str) -> Vec<(String, Option<i64>)> {
     let db = Db::open(s.location.clone(), OpenMode::ReadOnly).unwrap();

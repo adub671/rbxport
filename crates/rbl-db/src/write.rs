@@ -208,6 +208,8 @@ const WRITABLE_COLUMNS: &[&str] = &[
     // The information panel's Info tab.
     "Title", "Lyricist", "ReleaseYear", "TrackNo", "DiscNo", "DJPlayCount", "KeyID", "BPM", "ImagePath",
     "ArtistID", "OrgArtistID", "ComposerID", "RemixerID", "AlbumID", "GenreID", "LabelID",
+    // Date Added.
+    "StockDate",
 ];
 
 /// Lookup tables [`intern`] may add a row to. Same reason as above.
@@ -242,6 +244,10 @@ pub enum TrackField {
     /// file is retimed to it from its first beat, so the CDJ's grid and the
     /// column agree; see [`Writer::set_bpm`].
     Bpm,
+    /// Date Added, `StockDate`: the day the track joined the collection, as
+    /// import stamps it. `DateCreated`, the file's creation date, is not
+    /// this field and is never written by it.
+    DateAdded,
 }
 
 impl TrackField {
@@ -264,6 +270,7 @@ impl TrackField {
             "label" => Self::Label,
             "key" => Self::Key,
             "bpm" => Self::Bpm,
+            "dateAdded" => Self::DateAdded,
             _ => return None,
         })
     }
@@ -3821,6 +3828,10 @@ impl Writer {
             TrackField::Label => self.touch_reference(content, "LabelID", "djmdLabel", value),
             TrackField::Key => self.touch_key(content, value),
             TrackField::Bpm => self.set_bpm(content, value),
+            TrackField::DateAdded => {
+                let date = parse_date(value)?;
+                self.touch_content(content, "StockDate", &Value::Text(date.to_owned()))
+            }
         }
     }
 
@@ -3909,6 +3920,12 @@ impl Writer {
             TrackField::Label => name("LabelID", "djmdLabel", "Name"),
             TrackField::Key => name("KeyID", "djmdKey", "ScaleName"),
             TrackField::Bpm => return Ok(false),
+            TrackField::DateAdded => {
+                if parse_date(value).is_err() {
+                    return Ok(false);
+                }
+                text("StockDate")
+            }
         };
         self.row_shows(content, &expression, &wanted)
     }
@@ -5981,6 +5998,7 @@ fn field_column(field: TrackField) -> Option<&'static str> {
         TrackField::Genre => "GenreID",
         TrackField::Label => "LabelID",
         TrackField::Key => "KeyID",
+        TrackField::DateAdded => "StockDate",
         TrackField::Bpm => return None,
     })
 }
@@ -6010,6 +6028,37 @@ fn parse_number(value: &str, max: i64) -> Result<i64> {
         return Err(DbError::WriteRefused(format!("{n} is outside 0 to {max}")));
     }
     Ok(n)
+}
+
+/// A Date Added as it is stored: a real calendar date written `YYYY-MM-DD`,
+/// the form import stamps. Anything else is refused rather than stored.
+fn parse_date(value: &str) -> Result<&str> {
+    let refused = || DbError::WriteRefused(format!("{value:?} is not a date written YYYY-MM-DD"));
+    let number = |part: &str, len: usize| -> Option<u32> {
+        // `u32::from_str` alone would take a leading `+`.
+        if part.len() != len || !part.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        part.parse().ok()
+    };
+    let mut parts = value.split('-');
+    let (Some(year), Some(month), Some(day), None) = (
+        parts.next().and_then(|part| number(part, 4)),
+        parts.next().and_then(|part| number(part, 2)),
+        parts.next().and_then(|part| number(part, 2)),
+        parts.next(),
+    ) else {
+        return Err(refused());
+    };
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return Err(refused()),
+    };
+    if (1..=days).contains(&day) { Ok(value) } else { Err(refused()) }
 }
 
 fn intern(
